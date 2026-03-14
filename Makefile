@@ -75,14 +75,22 @@ install:
 	@echo "To control: systemctl --user {start,stop,restart,status} psiphond-ng"
 
 uninstall:
-	@echo "Uninstalling user service..."
-	@if [ -f ~/.config/systemd/user/psiphond-ng.service ]; then \
-		systemctl --user disable --now psiphond-ng 2>/dev/null || true; \
-		rm ~/.config/systemd/user/psiphond-ng.service; \
-		systemctl --user daemon-reload; \
+	@echo "Running uninstall script..."
+	@if [ -x "$(CURDIR)/deployment/uninstall.sh" ]; then \
+		$(CURDIR)/deployment/uninstall.sh; \
+	else \
+		echo "Error: deployment/uninstall.sh not found or not executable"; \
+		exit 1; \
 	fi
-	@rm -f ~/.local/bin/psiphond-ng
-	@echo "To remove config and data: rm -rf ~/.config/psiphond-ng ~/.local/var/lib/psiphon ~/.local/var/log/psiphon"
+
+full-uninstall:
+	@echo "Running FULL uninstall (removes everything including config, data, logs)..."
+	@if [ -x "$(CURDIR)/deployment/uninstall.sh" ]; then \
+		$(CURDIR)/deployment/uninstall.sh --full; \
+	else \
+		echo "Error: deployment/uninstall.sh not found or not executable"; \
+		exit 1; \
+	fi
 
 run:
 	./$(BUILD_DIR)/$(BINARY_NAME) -config psiphond-dev.conf
@@ -133,7 +141,8 @@ help:
 	@echo "  lint             - Run linter (requires golangci-lint)"
 	@echo "  clean            - Clean build artifacts"
 	@echo "  install          - Install as user service (no sudo) using built-in installer"
-	@echo "  uninstall        - Remove user service and binary"
+	@echo "  uninstall        - Remove user service and binary (prompts to remove config/data/logs)"
+	@echo "  full-uninstall   - Remove EVERYTHING including config, data, and logs (no prompts)"
 	@echo "  run              - Build and run in foreground"
 	@echo "  run-debug        - Build and run with debug logging"
 	@echo "  deps             - Download and verify dependencies"
