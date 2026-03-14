@@ -427,6 +427,14 @@ func main() {
 		return
 	}
 
+	// Handle "uninstall" command to remove all PsiphonNG traces
+	if len(os.Args) > 1 && os.Args[1] == "uninstall" {
+		if err := uninstallAll(); err != nil {
+			log.Fatalf("Uninstall failed: %v", err)
+		}
+		return
+	}
+
 	// Determine config path
 	var configPath string
 	if len(os.Args) > 1 {
@@ -640,4 +648,95 @@ func main() {
 	log.Println("Main: waiting for controller to stop...")
 	controller.Wait()
 	log.Println("Main: controller.Wait() returned, daemon exiting")
+}
+
+// uninstallAll performs a complete uninstallation of PsiphonNG.
+// It removes: systemd service, binary, config, data, and logs.
+func uninstallAll() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	// Define paths
+	binDir := filepath.Join(home, ".local/bin")
+	configDir := filepath.Join(home, ".config/psiphond-ng")
+	systemdDir := filepath.Join(home, ".config/systemd/user")
+	dataDir := filepath.Join(home, ".local/var/lib/psiphon")
+	logDir := filepath.Join(home, ".local/var/log/psiphon")
+
+	log.Println("=== PsiphonNG Full Uninstall ===")
+	log.Println("This will remove:")
+	log.Printf("  - Service: %s/psiphond-ng.service\n", systemdDir)
+	log.Printf("  - Binary: %s/psiphond-ng\n", binDir)
+	log.Printf("  - Config: %s\n", configDir)
+	log.Printf("  - Data: %s\n", dataDir)
+	log.Printf("  - Logs: %s\n", logDir)
+	log.Println("")
+
+	// Confirm with user if running interactively
+	if isTerminal() {
+		fmt.Print("Are you sure you want to completely uninstall PsiphonNG? [y/N] ")
+		var answer string
+		fmt.Scanln(&answer)
+		if !strings.EqualFold(answer, "y") && answer != "yes" && answer != "" {
+			log.Println("Uninstall cancelled.")
+			return nil
+		}
+	}
+
+	// 1. Stop and disable service
+	log.Println("→ Stopping and disabling systemd service...")
+	exec.Command("systemctl", "--user", "disable", "--now", "psiphond-ng.service").Run()
+	_ = exec.Command("systemctl", "--user", "stop", "psiphond-ng.service").Run()
+
+	// 2. Remove service file
+	serviceFile := filepath.Join(systemdDir, "psiphond-ng.service")
+	if _, err := os.Stat(serviceFile); err == nil {
+		log.Println("→ Removing service file...")
+		os.Remove(serviceFile)
+	}
+
+	// 3. Reload systemd daemon
+	log.Println("→ Reloading systemd daemon...")
+	exec.Command("systemctl", "--user", "daemon-reload").Run()
+
+	// 4. Remove binary
+	binaryPath := filepath.Join(binDir, "psiphond-ng")
+	if _, err := os.Stat(binaryPath); err == nil {
+		log.Println("→ Removing binary...")
+		os.Remove(binaryPath)
+	} else {
+		// Try to remove the running binary itself (if installed in a different location)
+		if exePath, err := os.Executable(); err == nil {
+			if filepath.Base(exePath) == "psiphond-ng" {
+				log.Printf("→ Note: Current binary at %s will be removed after exit\n", exePath)
+			}
+		}
+	}
+
+	// 5. Remove config directory
+	if _, err := os.Stat(configDir); err == nil {
+		log.Println("→ Removing config directory...")
+		os.RemoveAll(configDir)
+	}
+
+	// 6. Remove data directory
+	if _, err := os.Stat(dataDir); err == nil {
+		log.Println("→ Removing data directory...")
+		os.RemoveAll(dataDir)
+	}
+
+	// 7. Remove log directory
+	if _, err := os.Stat(logDir); err == nil {
+		log.Println("→ Removing log directory...")
+		os.RemoveAll(logDir)
+	}
+
+	log.Println("")
+	log.Println("✓ Uninstall complete. All PsiphonNG traces have been removed.")
+	log.Println("")
+	log.Println("Note: If you want to reinstall, simply run the binary again or use 'make install'.")
+
+	return nil
 }

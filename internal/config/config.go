@@ -612,9 +612,14 @@ func BuildPsiphonConfig(ngConfig *Config) (*psiphon.Config, error) {
 		cfg.CustomHeaders.Add(k, v)
 	}
 
-	if err := setupApprovalCallback(ngConfig, cfg); err != nil {
-		return nil, errors.Trace(err)
-	}
+	// TODO: Re-enable approval callback when using psiphon-tunnel-core with
+	// InproxyApproveClientConnection field. Disabled for now to build with
+	// vanilla psiphon-tunnel-core.
+	/*
+		if err := setupApprovalCallback(ngConfig, cfg); err != nil {
+			return nil, errors.Trace(err)
+		}
+	*/
 
 	// Commit the configuration to finalize and validate
 	if err := cfg.Commit(false); err != nil {
