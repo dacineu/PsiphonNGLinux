@@ -1,0 +1,17 @@
+[Unit]
+Description=PsiphonNG Tunnel Daemon
+After=network.target doip-approval-server.service
+Wants=doip-approval-server.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/psiphond-ng %h/.config/psiphond-ng/psiphond-ng.conf
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+# If TUN mode requires capabilities:
+# CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+
+[Install]
+WantedBy=default.target

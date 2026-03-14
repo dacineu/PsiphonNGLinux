@@ -1,0 +1,82 @@
+{
+  "data_directory": "{{HOME}}/.local/var/lib/psiphon",
+  "log_file": "{{HOME}}/.local/var/log/psiphon/psiphond-ng.log",
+  "log_level": "info",
+
+  // Get these from your Psiphon account or use the defaults for testing
+  "propagation_channel_id": "FFFFFFFFFFFFFFFF",
+  "sponsor_id": "FFFFFFFFFFFFFFFF",
+  "client_version": "1.0.0",
+  "client_platform": "linux",
+
+  // Tunnel mode: "portforward" for SOCKS/HTTP proxy, "packet" for TUN tunnel
+  "tunnel_mode": "portforward",
+
+  // Port forward settings (local SOCKS5 and HTTP proxies)
+  "local_socks_proxy_port": 1080,
+  "local_http_proxy_port": 8080,
+  "listen_interface": "127.0.0.1",
+  "disable_local_socks_proxy": false,
+  "disable_local_http_proxy": false,
+
+  // Split tunneling: bypass tunnel for local/regional traffic
+  "egress_region": "",
+  "split_tunnel_own_region": false,
+  "split_tunnel_regions": [],
+  "split_tunnel_include": [],
+  "split_tunnel_exclude": [],
+
+  // In-proxy mode (optional - requires DOIP approval server)
+  // Modes: "client" (connect to existing in-proxy), "proxy" (run an in-proxy server)
+  // Leave empty for normal Psiphon client mode
+  "inproxy_mode": "",
+  "inproxy_broker_server_addresses": [],
+  "inproxy_compartment_id": "",
+
+  // Approval integration (for inproxy_mode=proxy)
+  // URL of the DOIP approval server WebSocket endpoint
+  "inproxy_approval_websocket_url": "ws://localhost:8443/approval",
+  // How long to wait for approval response before rejecting connection
+  "inproxy_approval_timeout": "10s",
+  // What metadata to include in approval requests
+  "approval_logging": {
+    "include_raw_client_info": true,
+    "include_timestamp": true,
+    "include_daemon_info": true
+  },
+  // Local notification server for GUI alerts (e.g., to show approval status)
+  "approval_notification_enabled": false,
+  "approval_notification_port": ":9101",
+
+  // Connection settings
+  "establish_tunnel_timeout_seconds": 300,
+  "connection_worker_pool_size": 0,
+  "tunnel_pool_size": 1,
+
+  // Advanced: server list fetching and tactics
+  "disable_remote_server_list_fetcher": false,
+  "remote_server_list_download_filename": "remote_server_list",
+  "obfuscated_server_list_download_directory": "obfuscated_server_lists",
+  "disable_tactics": false,
+  "tactics_wait_period": "10s",
+  "tactics_retry_period": "1m",
+
+  // API settings
+  "psiphon_api_request_timeout": "30s",
+  "psiphon_api_status_request_period_min": "30s",
+  "psiphon_api_status_request_period_max": "60s",
+  "psiphon_api_connected_request_period": "5m",
+  "psiphon_api_persistent_stats_max_count": 100,
+
+  // TLS and protocol settings
+  "use_indistinguishable_tls": true,
+  "limit_tunnel_protocols": [],
+
+  // Resource limits (0 = unlimited)
+  "limit_upstream_bytes_per_second": 0,
+  "limit_downstream_bytes_per_second": 0,
+
+  // Metrics for monitoring (optional)
+  "metrics_enabled": false,
+  "metrics_port": ":9100"
+}

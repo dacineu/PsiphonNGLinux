@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+# PsiphonNG Control Script
+# Manages PsiphonNG as either a systemd user service (daemon) or as a foreground client
+
+set -euo pipefail
+
+# Configuration
+SERVICE_NAME="psiphond-ng"
+BIN_DIR="${HOME}/.local/bin"
+CONFIG_DIR="${HOME}/.config/psiphond-ng"
+DEFAULT_CONFIG="${CONFIG_DIR}/psiphond-ng.conf"
+SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+usage() {
+    cat <<EOF
+Usage: $0 {start|stop|restart|status|run} [options]
+
+Control PsiphonNG tunnel daemon/client.
+
+Commands:
+  start        Start PsiphonNG as a daemon (systemd user service)
+  stop         Stop the daemon
+  restart      Restart the daemon
+  status       Check daemon status
+  run          Run PsiphonNG in foreground (client mode, not daemon)
+
+Options for 'run':
+  -c, --config FILE   Path to config file (default: $DEFAULT_CONFIG)
+  -h, --help          Show this help message
+
+Examples:
+  $0 start                    # Start as daemon (systemd)
+  $0 status                  # Check daemon status
+  $0 run                     # Run in foreground with default config
+  $0 run -c ~/my-config.conf # Run with custom config
+
+Environment:
+  PSIPHON_CONFIG    Override config file path for 'run' command
+  PSIPHON_BIN       Override binary path (default: $BIN_DIR/psiphond-ng)
+
+Notes:
+  - To run as a foreground client (for debugging or manual use), use 'run'.
+  - To run as a background daemon (auto-restart, logging to journal), use 'start'.
+  - The service must be installed first (see install.sh).
+EOF
+    exit 1
+}
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $*"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
+
+check_dependencies() {
+    if ! command -v systemctl &> /dev/null; then
+        log_error "systemctl not found. Cannot manage service."
+        exit 1
+    fi
+}
+
+ensure_service_installed() {
+    if [ ! -f "${SYSTEMD_USER_DIR}/${SERVICE_NAME}.service" ]; then
+        log_error "Service not installed. Run install.sh first or copy the service file to ${SYSTEMD_USER_DIR}/"
+        exit 1
+    fi
+    # Reload systemd daemon in case service file changed
+    systemctl --user daemon-reload 2>/dev/null || true
+}
+
+cmd_start() {
+    check_dependencies
+    ensure_service_installed
+    log_info "Starting PsiphonNG daemon..."
+    if systemctl --user is-active --quiet "$SERVICE_NAME"; then
+        log_warn "Service is already running."
+        return 0
+    fi
+    if ! systemctl --user enable --now "$SERVICE_NAME"; then
+        log_error "Failed to start service. Check logs: journalctl --user-unit $SERVICE_NAME -n 50"
+        return 1
+    fi
+    sleep 1
+    if systemctl --user is-active --quiet "$SERVICE_NAME"; then
+        log_info "Service started successfully."
+        systemctl --user status "$SERVICE_NAME" --no-pager -l
+    else
+        log_error "Service failed to start. Check logs."
+        systemctl --user status "$SERVICE_NAME" --no-pager -l
+        return 1
+    fi
+}
+
+cmd_stop() {
+    check_dependencies
+    ensure_service_installed
+    log_info "Stopping PsiphonNG daemon..."
+    if ! systemctl --user is-active --quiet "$SERVICE_NAME"; then
+        log_warn "Service is not running."
+        return 0
+    fi
+    if ! systemctl --user disable --now "$SERVICE_NAME"; then
+        log_error "Failed to stop service."
+        return 1
+    fi
+    log_info "Service stopped."
+}
+
+cmd_restart() {
+    check_dependencies
+    ensure_service_installed
+    log_info "Restarting PsiphonNG daemon..."
+    if ! systemctl --user restart "$SERVICE_NAME"; then
+        log_error "Failed to restart service."
+        return 1
+    fi
+    sleep 1
+    systemctl --user status "$SERVICE_NAME" --no-pager -l
+}
+
+cmd_status() {
+    check_dependencies
+    if systemctl --user is-enabled --quiet "$SERVICE_NAME" 2>/dev/null; then
+        log_info "Service is enabled"
+    else
+        log_warn "Service is not enabled"
+    fi
+    if systemctl --user is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+        log_info "Service is active (running)"
+        systemctl --user status "$SERVICE_NAME" --no-pager -l
+    else
+        log_warn "Service is inactive"
+    fi
+}
+
+cmd_run() {
+    # Parse arguments for run command
+    CONFIG_FILE="${PSIPHON_CONFIG:-${DEFAULT_CONFIG}}"
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -c|--config)
+                CONFIG_FILE="$2"
+                shift 2
+                ;;
+            -h|--help)
+                usage
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                usage
+                ;;
+        esac
+    done
+
+    BIN="${PSIPHON_BIN:-${BIN_DIR}/psiphond-ng}"
+
+    if [ ! -f "$BIN" ]; then
+        log_error "Binary not found: $BIN"
+        exit 1
+    fi
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+        log_error "Config file not found: $CONFIG_FILE"
+        exit 1
+    fi
+
+    log_info "Running PsiphonNG in foreground (client mode)..."
+    log_info "Binary: $BIN"
+    log_info "Config: $CONFIG_FILE"
+    log_info "Press Ctrl+C to stop"
+    echo "---"
+
+    # Run the binary directly in foreground
+    exec "$BIN" "$CONFIG_FILE"
+}
+
+# Main command dispatcher
+if [ $# -lt 1 ]; then
+    usage
+fi
+
+COMMAND="$1"
+shift
+
+case "$COMMAND" in
+    start)
+        cmd_start
+        ;;
+    stop)
+        cmd_stop
+        ;;
+    restart)
+        cmd_restart
+        ;;
+    status)
+        cmd_status
+        ;;
+    run)
+        cmd_run "$@"
+        ;;
+    *)
+        log_error "Unknown command: $COMMAND"
+        usage
+        ;;
+esac

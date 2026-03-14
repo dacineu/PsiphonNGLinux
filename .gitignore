@@ -1,0 +1,53 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+build/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+go.work
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs and temp files
+*.log
+*.tmp
+*.pid
+
+# Local configuration that should not be committed
+config.local.conf
+psiphond-ng.conf
+secrets.env
+
+# Psiphon data directories (usually large)
+/var/lib/psiphon/
+/var/log/psiphon/
+
+# TUN device will persist if not cleaned up
+tun-psiphon
+
+# Upx compressed
+*-upx
+
+# Environment files
+.env
+.env.local
+
+# Build artifacts
+release/
