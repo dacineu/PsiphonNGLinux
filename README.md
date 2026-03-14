@@ -15,7 +15,7 @@ PsiphonNGLinux is a native Linux implementation of the Psiphon client, built dir
 ✅ **Automatic server discovery** - Remote server lists, DSL, OSL
 ✅ **Dynamic configuration (Tactics)** - Remote tuning without updates
 ✅ **Broker/in-proxy support** - Advanced evasion with WebRTC relays
-✅ **Connection approval integration** - Optional external authorization
+✅ **Connection approval integration** - Optional external authorization via WebSocket or DOIP protocol
 ✅ **Split tunneling** - Bypass tunnel for local/region traffic
 ✅ **Automatic updates** - Binary self-update capability
 ✅ **Performance monitoring** - Stats API, speed tests, feedback
@@ -28,24 +28,38 @@ PsiphonNGLinux is a native Linux implementation of the Psiphon client, built dir
 ### Prerequisites
 
 - Linux (tested on Ubuntu 20.04+, Debian 11+, Arch, Fedora)
-- Go 1.21+ (for building from source)
-- Root access (for TUN mode; optional for proxy-only mode)
-- Systemd (for service mode)
+- Go 1.21+ (for building from source) **or** download pre-built binary
+- **No root access required** for proxy mode
+- For TUN/packet mode: either root or `setcap cap_net_admin+ep` on binary
+- systemd (for service management; most Linux distros have this)
 
 ### Installation
+
+PsiphonNGLinux is designed to run as a **user-level service** with XDG directories. No `sudo` required!
 
 #### Option 1: Pre-built binary
 
 ```bash
 # Download latest release
 wget https://github.com/dacineu/PsiphonNGLinux/releases/latest/download/psiphond-ng-linux-amd64
-sudo mv psiphond-ng-linux-amd64 /usr/local/bin/psiphond-ng
-sudo chmod +x /usr/local/bin/psiphond-ng
+chmod +x psiphond-ng-linux-amd64
 
-# Install systemd service
-sudo cp config/psiphond-ng.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now psiphond-ng
+# Move to ~/.local/bin (or anywhere in your PATH)
+mkdir -p ~/.local/bin
+mv psiphond-ng-linux-amd64 ~/.local/bin/psiphond-ng
+
+# Install user systemd service
+mkdir -p ~/.config/systemd/user
+cp config/psiphond-ng-user.service ~/.config/systemd/user/psiphond-ng.service
+
+# Reload systemd user daemon
+systemctl --user daemon-reload
+
+# Enable and start the service
+systemctl --user enable --now psiphond-ng
+
+# Check status
+systemctl --user status psiphond-ng
 ```
 
 #### Option 2: Build from source
@@ -56,27 +70,73 @@ cd PsiphonNGLinux
 go mod download
 go build -o psiphond-ng ./cmd/psiphond-ng
 
-# Install
-sudo cp psiphond-ng /usr/local/bin/
-sudo cp config/psiphond-ng.service /etc/systemd/system/
-sudo cp config/psiphond-ng.conf /etc/psiphon/
-sudo systemctl daemon-reload
-sudo systemctl enable --now psiphond-ng
+# Install user systemd service
+mkdir -p ~/.config/systemd/user
+cp config/psiphond-ng-user.service ~/.config/systemd/user/psiphond-ng.service
+systemctl --user daemon-reload
+systemctl --user enable --now psiphond-ng
 ```
 
----
+#### Option 3: Run directly (no service)
+
+For running without root privileges using **systemd user services**:
+
+```bash
+# 1. Build or obtain the binary
+go build -o psiphond-ng ./cmd/psiphond-ng
+
+# 2. Install user service
+mkdir -p ~/.config/systemd/user
+cp config/psiphond-ng-user.service ~/.config/systemd/user/psiphond-ng.service
+
+# 3. Reload systemd user daemon
+systemctl --user daemon-reload
+
+# 4. Enable and start the service
+systemctl --user enable --now psiphond-ng
+
+# 5. Check status
+systemctl --user status psiphond-ng
+
+# 6. View logs
+journalctl --user -u psiphond-ng -f
+```
+
+**Notes:**
+- The service runs entirely within your user session
+- Configuration is auto-created at `~/.config/psiphond-ng/psiphond-ng.conf`
+- Data directory: `~/.local/var/lib/psiphon`
+- Log file: `~/.local/var/log/psiphon/psiphond-ng.log`
+- The default config includes the official Psiphon server list signature key, so remote server fetching works out of the box
+- TUN mode requires root or `setcap cap_net_admin+ep` on the binary (see below)
+
+#### Run directly (no systemd)
+
+```bash
+# First time: creates default config at ~/.config/psiphond-ng/psiphond-ng.conf
+./psiphond-ng
+
+# Or specify custom config location
+./psiphond-ng -config /path/to/custom.conf
+
+# Run in foreground (logs to console)
+./psiphond-ng -config ~/.config/psiphond-ng/psiphond-ng.conf -log-level debug
+```
+
 
 ## Configuration
 
 ### Configuration File
 
-Default location: `/etc/psiphon/psiphond-ng.conf`
+**Default location** (user-level): `~/.config/psiphond-ng/psiphond-ng.conf`
+
+This file is auto-created with sensible defaults the first time you run the binary or start the user service.
 
 ```json
 {
-  "DataDirectory": "/var/lib/psiphon",
-  "LogFile": "/var/log/psiphon/psiphond-ng.log",
-  "LogLevel": "info",
+  "data_directory": "~/.local/var/lib/psiphon",
+  "log_file": "~/.local/var/log/psiphon/psiphond-ng.log",
+  "log_level": "info",
 
   // Network identifiers (obtain from Psiphon Network)
   "PropagationChannelId": "YOUR_CHANNEL_ID",
@@ -153,32 +213,34 @@ Default location: `/etc/psiphon/psiphond-ng.conf`
 
 ## Usage
 
-### Starting the service
+### Starting the user service
 
 ```bash
-# Start
-sudo systemctl start psiphond-ng
+# Start (if not already started with --now)
+systemctl --user start psiphond-ng
 
-# Enable auto-start on boot
-sudo systemctl enable psiphond-ng
+# Enable auto-start on login/boot
+systemctl --user enable psiphond-ng
 
 # Check status
-sudo systemctl status psiphond-ng
+systemctl --user status psiphond-ng
 
 # View logs
-sudo journalctl -u psiphond-ng -f
-sudo journalctl -u psiphond-ng --since "1 hour ago"
+journalctl --user -u psiphond-ng -f
+journalctl --user -u psiphond-ng --since "1 hour ago"
 ```
 
 ### Running manually (for debugging)
 
 ```bash
-# With config file
-sudo psiphond-ng -config /etc/psiphon/psiphond-ng.conf
+# Run with default user config (~/.config/psiphond-ng/psiphond-ng.conf)
+./psiphond-ng
 
-# With data directory (for testing)
-mkdir -p ~/.psiphon
-psiphond-ng -datadir ~/.psiphon -config ./dev.conf
+# With custom config file
+./psiphond-ng -config /path/to/custom.conf
+
+# With debug logging
+./psiphond-ng -config ~/.config/psiphond-ng/psiphond-ng.conf -log-level debug
 ```
 
 ### When running in port forward mode:
@@ -198,10 +260,11 @@ psiphond-ng -datadir ~/.psiphon -config ./dev.conf
 
 1. The TUN device (`tun-psiphon` by default) is created and configured
 2. All traffic routed through the tunnel (configure via `PacketTunnelGatewayIPv4`)
-3. Set up NAT on the host if needed:
+3. Set up NAT on the host if sharing the tunnel with other devices/containers:
    ```bash
    sudo iptables -t nat -A POSTROUTING -o tun-psiphon -j MASQUERADE
    ```
+   (This requires root; skip if only routing your own traffic)
 4. DNS queries are intercepted and sent through the tunnel
 
 ---
@@ -238,12 +301,80 @@ The client will:
   "InproxyEgressInterface": "eth0", // for TUN mode
   "InproxyMTU": 1500,
   // Optional: connection approval
-  "InproxyApprovalWebSocketURL": "ws://localhost:8080/approve",
+  "InproxyApprovalWebSocketURL": "ws://localhost:8080/approve",  // or DOIP approval server
   "InproxyApprovalTimeout": "5s"
 }
 ```
 
 See `docs/inproxy-tun-approval-integration.md` (from psiphon-tunnel-core) for detailed setup.
+
+---
+
+## Integration with DOIP Approval Server
+
+For production deployments requiring robust connection authorization, the **DOIP Approval Server**
+provides a standards-compliant, dynamically-configurable solution.
+
+### What is DOIP Approval Server?
+
+`doip-approval-server` is a standalone Go service that validates connection approval requests
+against a configurable set of strict fields. It features:
+
+- **WebSocket endpoint** (`/approval` or `/ws`) for real-time validation
+- **Admin HTTP API** (`/admin/strict-fields`) for dynamic configuration
+- **JSON config file** with hot-reloading (no restart needed)
+- **Systemd user service** support
+- **Strict field enforcement**: requires specific metadata fields in each request
+
+### Usage with PsiphonNGLinux
+
+1. **Deploy the DOIP approval server** (see its README):
+   ```bash
+   cd doip-approval-server
+   go build -o doip-approval-server ./cmd/doip-approval-server
+   ./doip-approval-server -config ./config.json
+   ```
+
+2. **Configure PsiphonNGLinux** to use it:
+
+   ```json
+   {
+     "inproxy_approval_websocket_url": "ws://localhost:8443/approval",
+     "inproxy_approval_timeout": "10s"
+   }
+   ```
+
+   Note: The `InproxyApprovalWebSocketURL` works with any WebSocket server implementing
+   the approval protocol (JSON request/response). The DOIP server uses the same protocol.
+
+3. **Configure strict fields** (optional) via DOIP admin API:
+   ```bash
+   curl -X POST http://localhost:8080/admin/strict-fields \
+     -H "Content-Type: application/json" \
+     -d '{"strict_fields": ["connection_id", "client_region", "destination", "timestamp"]}'
+   ```
+
+   The approval server will then require these fields in every approval request from Psiphon.
+   Psiphon's `ClientConnectionInfo` includes: `connection_id`, `client_region`, `destination`,
+   `network_protocol`. Additional fields (timestamp, daemon_version, daemon_platform) would
+   need to be added via custom code if required.
+
+### Benefits over Simple WebSocket Server
+
+| Feature | Simple ws-approval-server | DOIP Approval Server |
+|---------|--------------------------|---------------------|
+| Dynamic config reload | ❌ No | ✅ Yes (via file watch) |
+| Admin API for config | ❌ No | ✅ Yes |
+| Strict field validation | ❌ No (auto-approves) | ✅ Yes |
+| Production-ready logging | ❌ Basic | ✅ Extensible |
+| Systemd service | ❌ Manual | ✅ Included |
+
+### When to Use Which?
+
+- **ws-approval-server**: Development, testing, proof-of-concept
+- **DOIP approval server**: Production, multi-tenant environments, audit requirements
+
+---
 
 ---
 
@@ -285,23 +416,23 @@ Configure which traffic goes through the tunnel:
 
 If `UseNoticeFiles` is enabled, notices are written to:
 
-- Main notice file: `/var/log/psiphon/psiphond-ng.notices`
-- Rotated file: `/var/log/psiphon/psiphond-ng.notices.1` (if size > `NoticeRotationSize`)
+- Main notice file: `~/.local/var/log/psiphon/psiphond-ng.notices`
+- Rotated file: `~/.local/var/log/psiphon/psiphond-ng.notices.1` (if size > `NoticeRotationSize`)
 
-### Journald (systemd)
+### Journald (systemd user service)
 
 ```bash
 # View recent logs
-sudo journalctl -u psiphond-ng -n 100
+journalctl --user -u psiphond-ng -n 100
 
 # Follow live logs
-sudo journalctl -u psiphond-ng -f
+journalctl --user -u psiphond-ng -f
 
 # View logs with specific priority
-sudo journalctl -u psiphond-ng -p info
+journalctl --user -u psiphond-ng -p info
 
 # Export logs
-sudo journalctl -u psiphond-ng --since "2024-01-01" > psiphon.log
+journalctl --user -u psiphond-ng --since "2024-01-01" > psiphon.log
 ```
 
 ### Debug logging
@@ -321,7 +452,7 @@ Set `"LogLevel": "debug"` in config. Verbose logs include:
 
 1. Check logs:
    ```bash
-   sudo journalctl -u psiphond-ng -n 50
+   journalctl --user -u psiphond-ng -n 50
    ```
 
 2. Common issues:
@@ -332,16 +463,18 @@ Set `"LogLevel": "debug"` in config. Verbose logs include:
 
 3. Enable debug logging temporarily:
    ```bash
-   sudo systemctl edit psiphond-ng
+   systemctl --user edit psiphond-ng
    # Add:
    [Service]
    Environment="LOG_LEVEL=debug"
-   sudo systemctl restart psiphond-ng
+   systemctl --user restart psiphond-ng
    ```
 
 ### TUN device not created
 
 - Ensure CAP_NET_ADMIN capability or run as root
+  - For user-level service, grant capability: `sudo setcap cap_net_admin+ep /usr/local/bin/psiphond-ng`
+  - Or run the binary with sudo (not recommended for production)
 - Check TUN module loaded: `sudo modprobe tun`
 - Verify no conflicting TUN devices
 
@@ -410,43 +543,46 @@ See `psiphon/common/parameters/parameters.go` for all tunable parameters. Exampl
 
 ## Security Considerations
 
-- **Configuration files** contain sensitive data (server entries, keys). Set permissions:
+PsiphonNGLinux is designed to run without root privileges. Here are security best practices:
+
+- **Configuration files** contain sensitive data. For user-level installation:
   ```bash
-  sudo chmod 600 /etc/psiphon/psiphond-ng.conf
-  sudo chown root:root /var/lib/psiphon
+  chmod 600 ~/.config/psiphond-ng/psiphond-ng.conf
   ```
 
-- **Log files** may contain metadata. Secure log access:
+- **Log files** may contain metadata. Ensure proper permissions:
   ```bash
-  sudo chown psiphon:psiphon /var/log/psiphon/
-  sudo chmod 750 /var/log/psiphon
+  chmod 700 ~/.local/var/log/psiphon
   ```
 
-- **Run as non-root** when using port forward mode (no TUN). Create dedicated user:
-  ```bash
-  sudo useradd -r -s /usr/sbin/nologin psiphon
-  sudo chown -R psiphon:psiphon /var/lib/psiphon /var/log/psiphon
-  ```
+- **Run as non-root** by default (user service). No dedicated system user needed.
 
-- **TUN mode** requires root or CAP_NET_ADMIN. Consider setcap:
-  ```bash
-  sudo setcap cap_net_admin+ep /usr/local/bin/psiphond-ng
-  ```
+- **TUN mode** requires elevated privileges:
+  - Option 1: Run binary with `sudo` (not recommended for ongoing use)
+  - Option 2: Grant capability: `sudo setcap cap_net_admin+ep $(which psiphond-ng)` (preferred)
+  - Option 3: Use root-only system-wide service (legacy approach)
 
-- **Firewall**: Allow outbound to Psiphon servers (typically port 443). Restrict inbound access to local proxies.
+- **Firewall**: Allow outbound to Psiphon servers (typically port 443). Restrict inbound access to local proxies (127.0.0.1 only by default).
+
+- **Process isolation**: The user service runs with security hardening (NoNewPrivileges, PrivateTmp, etc.) automatically.
+
+- **Binary verification**: Verify downloads with checksums when possible.
 
 ---
 
 ## Updating
 
-### Manual update
+### Manual update (user-level)
 
 ```bash
-# Download new binary
-sudo wget -O /usr/local/bin/psiphond-ng https://github.com/dacineu/PsiphonNGLinux/releases/latest/download/psiphond-ng-linux-amd64
-sudo chmod +x /usr/local/bin/psiphond-ng
-sudo systemctl restart psiphond-ng
+# Download new binary to ~/.local/bin
+wget -O ~/.local/bin/psiphond-ng https://github.com/dacineu/PsiphonNGLinux/releases/latest/download/psiphond-ng-linux-amd64
+chmod +x ~/.local/bin/psiphond-ng
+
+# Restart service
+systemctl --user restart psiphond-ng
 ```
+
 
 ### Automatic updates (watchtower)
 
@@ -460,17 +596,29 @@ If using the optional watchtower integration:
 
 ## Uninstallation
 
-```bash
-# Stop and disable service
-sudo systemctl disable --now psiphond-ng
+### User-level installation
 
-# Remove binary
-sudo rm /usr/local/bin/psiphond-ng
+```bash
+# Stop and disable user service
+systemctl --user disable --now psiphond-ng
+
+# Remove user service file
+rm ~/.config/systemd/user/psiphond-ng.service
+systemctl --user daemon-reload
+
+# Remove binary (if installed to ~/.local/bin)
+rm ~/.local/bin/psiphond-ng
 
 # Remove config and data
-sudo rm -rf /etc/psiphon /var/lib/psiphon /var/log/psiphon
+rm -rf ~/.config/psiphond-ng ~/.local/var/lib/psiphon ~/.local/var/log/psiphon
+```
 
-# Remove systemd unit
+### System-wide installation (if you used sudo)
+
+```bash
+sudo systemctl disable --now psiphond-ng
+sudo rm /usr/local/bin/psiphond-ng
+sudo rm -rf /etc/psiphon /var/lib/psiphon /var/log/psiphon
 sudo rm /etc/systemd/system/psiphond-ng.service
 sudo systemctl daemon-reload
 ```
@@ -492,11 +640,11 @@ PsiphonNGLinux/
 │   ├── tunnel/              # Tunnel management wrapper
 │   └── metrics/             # Prometheus/StatsD metrics
 ├── config/
-│   ├── psiphond-ng.conf     # Default config
-│   ├── psiphond-ng.service  # Systemd unit file
-│   └── defaults/            # Default parameter sets
+│   ├── psiphond-ng.conf         # Default config (system-wide template)
+│   ├── psiphond-ng-user.service # User-level systemd service
+│   └── defaults/                # Default parameter sets
 ├── scripts/
-│   ├── install.sh           # Installation script
+│   ├── install.sh           # System-wide installation script
 │   ├── uninstall.sh         # Removal script
 │   └── update.sh            # Update check script
 ├── docs/
@@ -523,6 +671,20 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o psiphond-ng .
 upx --best psiphond-ng
 ```
 
+### Installing after build (user-level)
+
+```bash
+# Copy binary to ~/.local/bin
+mkdir -p ~/.local/bin
+cp psiphond-ng ~/.local/bin/
+
+# Install user service
+mkdir -p ~/.config/systemd/user
+cp config/psiphond-ng-user.service ~/.config/systemd/user/psiphond-ng.service
+systemctl --user daemon-reload
+systemctl --user enable --now psiphond-ng
+```
+
 ---
 
 ## Differences from PsiphonLinux
@@ -539,7 +701,7 @@ upx --best psiphond-ng
 | **Metrics** | Minimal | Prometheus/StatsD, feedback API |
 | **Service management** | Simple init script | Full systemd unit with watchdog, journald |
 | **Compartment IDs** | No | Yes (for broker rate limits) |
-| **Connection approval** | No | Optional WebSocket hook |
+| **Connection approval** | No | Optional WebSocket hook (compatible with DOIP approval server) |
 | **Log rotation** | Manual | Built-in rotation + journald |
 | **Split tunneling** | No | Yes (own region, CIDR include/exclude) |
 

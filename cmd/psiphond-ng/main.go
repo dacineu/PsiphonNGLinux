@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -19,6 +20,37 @@ import (
 	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon"
 	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/errors"
 )
+
+// findFreePort checks if the given port is available. If not, it increments
+// until it finds a free port and returns it.
+func findFreePort(startPort int) int {
+	port := startPort
+	for i := 0; i < 100; i++ { // try up to 100 ports
+		addr := fmt.Sprintf("127.0.0.1:%d", port)
+		ln, err := net.Listen("tcp", addr)
+		if err == nil {
+			ln.Close()
+			return port
+		}
+		port++
+	}
+	// If we can't find a free port, return the original as fallback
+	return startPort
+}
+
+// interfaceExists checks if a network interface with the given name exists.
+func interfaceExists(name string) bool {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return false
+	}
+	for _, iface := range ifaces {
+		if iface.Name == name {
+			return true
+		}
+	}
+	return false
+}
 
 // PsiphonController wraps the psiphon Controller
 type PsiphonController struct {
@@ -54,16 +86,27 @@ func NewPsiphonController(ngConfig *config.Config) (*PsiphonController, error) {
 
 // Start begins tunnel operation
 func (pc *PsiphonController) Start() error {
+	log.Println("PsiphonController.Start: opening data store")
 	// Initialize data store
 	if err := psiphon.OpenDataStore(pc.psiphonConfig); err != nil {
+		log.Printf("PsiphonController.Start: OpenDataStore failed: %v", err)
 		return errors.Trace(err)
 	}
+	log.Println("PsiphonController.Start: data store opened")
 
 	// Start tunnel loop with a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
 	pc.cancelFunc = cancel
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("PsiphonController: Run goroutine panicked: %v", r)
+				close(pc.stopChan)
+			}
+		}()
+		log.Println("PsiphonController: Run goroutine starting")
 		pc.controller.Run(ctx)
+		log.Println("PsiphonController: Run returned normally, closing stopChan")
 		close(pc.stopChan)
 	}()
 
@@ -429,6 +472,31 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
+	// Validate and auto-configure listen interface
+	// If the configured interface is invalid or can't be identified, fall back to empty (defaults to 127.0.0.1)
+	if ngConfig.ListenInterface != "" && ngConfig.ListenInterface != "any" {
+		if !interfaceExists(ngConfig.ListenInterface) {
+			log.Printf("Warning: listen_interface '%s' does not exist, falling back to default (127.0.0.1)", ngConfig.ListenInterface)
+			ngConfig.ListenInterface = ""
+		}
+	}
+
+	// Auto-detect free ports if configured ports are in use
+	originalSocks := ngConfig.LocalSocksProxyPort
+	originalHTTP := ngConfig.LocalHttpProxyPort
+	ngConfig.LocalSocksProxyPort = findFreePort(ngConfig.LocalSocksProxyPort)
+	ngConfig.LocalHttpProxyPort = findFreePort(ngConfig.LocalHttpProxyPort)
+
+	// If ports changed, save the updated config
+	if ngConfig.LocalSocksProxyPort != originalSocks || ngConfig.LocalHttpProxyPort != originalHTTP {
+		log.Printf("Ports updated: SOCKS %d→%d, HTTP %d→%d",
+			originalSocks, ngConfig.LocalSocksProxyPort,
+			originalHTTP, ngConfig.LocalHttpProxyPort)
+		if err := config.SaveConfig(ngConfig, configPath); err != nil {
+			log.Printf("Warning: failed to save updated config with new ports: %v", err)
+		}
+	}
+
 	// Ensure required directories exist (DataDirectory and LogFile parent)
 	dirs := []string{
 		ngConfig.DataDirectory,
@@ -475,6 +543,8 @@ func main() {
 	if err := psiphon.SetNoticeWriter(noticeWriter); err != nil {
 		log.Fatalf("Failed to set notice writer: %v", err)
 	}
+	// Enable diagnostic notices so we see info/error messages from psiphon
+	psiphon.SetEmitDiagnosticNotices(true, false)
 
 	log.Println("Starting PsiphonNGLinux daemon")
 	log.Printf("Version: %s", ngConfig.ClientVersion)
@@ -567,6 +637,7 @@ func main() {
 	}()
 
 	// Wait for shutdown
+	log.Println("Main: waiting for controller to stop...")
 	controller.Wait()
-	log.Println("PsiphonNGLinux daemon exiting")
+	log.Println("Main: controller.Wait() returned, daemon exiting")
 }

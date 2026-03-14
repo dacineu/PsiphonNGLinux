@@ -94,14 +94,18 @@ You should see notices like:
 
 ---
 
-## 4. Run in TUN Mode (System-wide)
+## 4. Run in TUN Mode (Packet Tunnel)
 
-TUN mode requires root or `CAP_NET_ADMIN`.
+TUN mode requires elevated privileges. You have two options:
 
-### Option A: Run as root (quick test)
+### Option A: Grant capability (recommended)
 
 ```bash
-sudo ./psiphond-ng -config psiphond-dev.conf
+# Grant CAP_NET_ADMIN to binary (one-time)
+sudo setcap cap_net_admin+ep $(which psiphond-ng 2>/dev/null || ./psiphond-ng)
+
+# Run as normal user
+./psiphond-ng -config psiphond-dev.conf
 ```
 
 Edit `psiphond-dev.conf` first:
@@ -115,14 +119,10 @@ Edit `psiphond-dev.conf` first:
 }
 ```
 
-### Option B: Grant capability (preferred for development)
+### Option B: Run with sudo (not recommended for regular use)
 
 ```bash
-# Grant CAP_NET_ADMIN to binary
-sudo setcap cap_net_admin+ep ./psiphond-ng
-
-# Run as normal user
-./psiphond-ng -config psiphond-dev.conf
+sudo ./psiphond-ng -config psiphond-dev.conf
 ```
 
 **Test TUN interface:**
@@ -141,30 +141,44 @@ curl --interface tun-psiphon https://checkip.amazonaws.com
 
 ---
 
-## 5. Systemd Service (Optional)
+## 5. Systemd User Service (Recommended)
 
-For testing the service integration:
+PsiphonNGLinux is designed to run as a user service with XDG directories.
+
+### Option A: Built-in installer (easiest)
 
 ```bash
-# Build and install (from project root)
-sudo ./scripts/install.sh
+# From project root (after building)
+./psiphond-ng service
 ```
 
-The script will:
-1. Create `psiphon` user
-2. Create `/var/lib/psiphon` and `/var/log/psiphon`
-3. Install binary to `/usr/local/bin/psiphond-ng`
-4. Install config to `/etc/psiphon/psiphond-ng.conf`
-5. Install systemd unit
-6. Optionally enable and start service
+This will:
+1. Copy binary to `~/.local/bin/psiphond-ng`
+2. Create config at `~/.config/psiphond-ng/psiphond-ng.conf`
+3. Install systemd user service to `~/.config/systemd/user/`
+4. Enable and start the service
+5. Create data and log directories under `~/.local/var/`
+
+### Option B: Manual install
+
+```bash
+mkdir -p ~/.local/bin
+cp build/psiphond-ng ~/.local/bin/
+mkdir -p ~/.config/systemd/user
+cp config/psiphond-ng-user.service ~/.config/systemd/user/psiphond-ng.service
+systemctl --user daemon-reload
+systemctl --user enable --now psiphond-ng
+```
 
 **Manage service:**
 ```bash
-sudo systemctl status psiphond-ng
-sudo systemctl start psiphond-ng
-sudo systemctl stop psiphond-ng
-sudo journalctl -u psiphond-ng -f
+systemctl --user status psiphond-ng
+systemctl --user start psiphond-ng
+systemctl --user stop psiphond-ng
+journalctl --user -u psiphond-ng -f
 ```
+
+**Note:** The old `scripts/install.sh` (system-wide) is deprecated. Use `./psiphond-ng service` for user-level installation.
 
 ---
 
@@ -348,8 +362,8 @@ Before submitting PR, test:
 - [ ] Binary builds without errors
 - [ ] Starts without crashing (check config)
 - [ ] Establishes tunnel in portforward mode
-- [ ] Establishes tunnel in TUN mode (with sudo/cap)
-- [ ] Systemd service installs and starts
+- [ ] Establishes tunnel in TUN mode (with capability or sudo)
+- [ ] User service installs and starts
 - [ ] Logs written to file and journald
 - [ ] Graceful shutdown on SIGTERM
 - [ ] Config hot-reload on SIGHUP (TODO)
@@ -385,15 +399,15 @@ ss -tlnp | grep LISTEN
 
 ### Binary won't start after install
 
-Check permissions:
+Check permissions (user service):
 ```bash
-ls -l /usr/local/bin/psiphond-ng
+ls -l ~/.local/bin/psiphond-ng
 # Should be -rwxr-xr-x (0755)
 ```
 
-Check systemd journal:
+Check systemd user journal:
 ```bash
-sudo journalctl -u psiphond-ng -n 50
+journalctl --user -u psiphond-ng -n 50
 ```
 
 ---

@@ -30,7 +30,7 @@ This document describes the architecture and implementation of PsiphonNGLinux, h
 | **Systemd** | No | Full unit with watchdog, restart, limits |
 | **Logging** | Stdout only | Journald + file rotation |
 | **Compartment IDs** | No | Yes (for broker rate limiting) |
-| **Connection approval** | No | Optional WebSocket hook |
+| **Connection approval** | No | Optional WebSocket hook (compatible with DOIP approval server) |
 | **Metrics** | None | Prometheus/StatsD support (TODO) |
 | **Auto-update** | Manual | Can integrate with watchtower/self-update |
 | **Security** | Runs as root (simple) | Dedicated user, capabilities, seccomp |
@@ -199,7 +199,7 @@ Our daemon:
 
 **Testing TUN:**
 ```bash
-sudo setcap cap_net_admin+ep /usr/local/bin/psiphond-ng
+sudo setcap cap_net_admin+ep $(which psiphond-ng)
 # Restart service
 ip addr show tun-psiphon
 ```
@@ -250,7 +250,7 @@ This enables dynamic, external control over which clients can connect.
 ### Hierarchical Config
 
 1. **Base defaults** (`DefaultConfig()`): Hardcoded safe defaults
-2. **File config**: `/etc/psiphon/psiphond-ng.conf` (admin overrides)
+2. **File config**: `~/.config/psiphond-ng/psiphond-ng.conf` (user overrides)
 3. **Tactics**: Remote configuration (highest priority)
 
 ### Config Validation
@@ -404,10 +404,12 @@ Web UI for configuration:
    ```bash
    ./scripts/build.sh
    ```
-4. **Test manually**:
+4. **Test manually** (portforward mode, no sudo):
    ```bash
-   sudo ./build/psiphond-ng -config test.conf
+   ./build/psiphond-ng -config test.conf
    ```
+
+   For TUN mode, either grant capability `sudo setcap cap_net_admin+ep ./build/psiphond-ng` or run with sudo.
 5. **Check with linters**:
    ```bash
    go vet ./...
@@ -424,18 +426,30 @@ Web UI for configuration:
 
 ## Security Checklist
 
-- [x] Run service as non-root (`psiphon` user)
-- [x] Drop capabilities after TUN creation (`AmbientCapabilities` not used properly yet)
-- [x] Read-only root filesystem (`ProtectSystem=strict`)
-- [x] Private /tmp (`PrivateTmp=true`)
-- [x] Restrict file writes to data/log dirs (`ReadWritePaths`)
-- [x] System call filtering (`SystemCallFilter`)
-- [x] No new privileges (`NoNewPrivileges=true`)
-- [x] Secure config permissions (0600)
-- [x] Verify binary signatures (TODO in auto-update)
+**User-Level Service Design:**
+
+- [x] Runs as regular user (no elevated privileges by default)
+- [x] Uses XDG directories (`~/.config`, `~/.local/var`)
+- [x] No system-wide files or directories
+- [x] No dedicated system account required
+- [x] Systemd user service with hardening (`NoNewPrivileges`, `PrivateTmp`, `ProtectHome`, etc.)
+- [x] Capability bounding set (`CAP_NET_ADMIN` only if TUN needed via setcap)
+- [x] Resource limits (NOFILE, NPROC)
+- [x] Config file permissions: 0600 (user-owned)
+- [x] Log and data directories: user-only access (0700)
+- [x] System call filtering (`@system-service`)
+
+**TUN Mode (when needed):**
+
+- [ ] Grant `CAP_NET_ADMIN` via `setcap cap_net_admin+ep $(which psiphond-ng)` (preferred)
+- [ ] Or run binary with sudo (not recommended for continuous operation)
+
+**Future Enhancements:**
+
 - [ ] Implement mutual TLS for approval server (WSS)
-- [ ] Audit iptables rules setup in offense mode
-- [ ] Consider seccomp profile for further restrictions
+- [ ] Config file validation on load
+- [ ] Binary update signature verification
+- [ ] Optional seccomp profile for further restriction
 
 ---
 
@@ -443,17 +457,18 @@ Web UI for configuration:
 
 ### Monitoring
 
-Check service health:
+Check service health (user service):
 ```bash
-systemctl status psiphond-ng
-journalctl -u psiphond-ng -f
+systemctl --user status psiphond-ng
+journalctl --user -u psiphond-ng -f
 ```
 
 Check tunnel status:
 ```bash
 # Controller status (would need to expose via API or metrics)
-# For now, parse notices:
-grep "Tunnels" /var/log/psiphon/psiphond-ng.log
+# For now, parse notice file or journal:
+grep "Tunnels" ~/.local/var/log/psiphon/psiphond-ng.log
+# or: journalctl --user -u psiphond-ng | grep Tunnels
 ```
 
 Check TUN device:
@@ -464,38 +479,46 @@ ip route | grep tun-psiphon
 
 ### Updates
 
-Manual:
+Manual (user-level):
 ```bash
-sudo systemctl stop psiphond-ng
-sudo wget -O /usr/local/bin/psiphond-ng https://github.com/...
-sudo chmod +x /usr/local/bin/psiphond-ng
-sudo systemctl start psiphond-ng
+systemctl --user stop psiphond-ng
+wget -O ~/.local/bin/psiphond-ng https://github.com/.../psiphond-ng-linux-amd64
+chmod +x ~/.local/bin/psiphond-ng
+systemctl --user start psiphond-ng
 ```
 
 Automatic (if enabled):
 ```bash
-# Watchtower or custom script
-sudo /usr/local/bin/psiphond-ng-updater
+# Custom script (runs as user)
+~/.local/bin/psiphond-ng-updater
+# or use watchtower, auto-update mechanism, etc.
 ```
 
 ### Troubleshooting
 
 **Service fails to start:**
 ```bash
-sudo journalctl -u psiphond-ng -n 100 -p err
-# Common: permission denied on /var/lib/psiphon → fix ownership
+journalctl --user -u psiphond-ng -n 100 -p err
+# Common: config validation errors, missing directories, permission issues
 ```
 
 **No tunnels established:**
 ```bash
-sudo -u psiphon /usr/local/bin/psiphond-ng -config /etc/psiphon/psiphond-ng.conf -debug
 # Run in foreground with verbose logging
+~/.local/bin/psiphond-ng -config ~/.config/psiphond-ng/psiphond-ng.conf -debug
+# or
+./build/psiphond-ng -config ./psiphond-dev.conf -debug
 ```
 
 **TUN not created:**
 ```bash
-sudo setcap cap_net_admin+ep /usr/local/bin/psiphond-ng
-sudo systemctl restart psiphond-ng
+# Grant capability (one-time, requires sudo)
+sudo setcap cap_net_admin+ep $(which psiphond-ng || ~/.local/bin/psiphond-ng)
+
+# Restart user service
+systemctl --user restart psiphond-ng
+
+# Check TUN module
 lsmod | grep tun || sudo modprobe tun
 ```
 

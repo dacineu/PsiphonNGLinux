@@ -58,21 +58,24 @@ Typical broker deployment:
 }
 ```
 
-### Deploying
+### Deploying (User-Level)
 
 ```bash
 # Build
 ./scripts/build.sh
 
-# Install
-sudo ./scripts/install.sh
+# Install as user service (no sudo!)
+./psiphond-ng service
+
+# Or use the deployment installer:
+# cd deployment && ./install.sh
 
 # Edit config
-sudo nano /etc/psiphon/psiphond-ng.conf
+nano ~/.config/psiphond-ng/psiphond-ng.conf
 # Set inproxy_mode and broker addresses
 
 # Start service
-sudo systemctl start psiphond-ng
+systemctl --user start psiphond-ng
 ```
 
 ### Client Behavior
@@ -177,17 +180,22 @@ This interface should have:
 
 ```bash
 ./scripts/build.sh -t inproxy
-sudo cp build/psiphond-ng /usr/local/bin/
-sudo cp config/psiphond-ng.conf /etc/psiphon/  # edited
-sudo systemctl enable psiphond-ng
-sudo systemctl start psiphond-ng
-```
+
+# User-level install (no sudo!)
+./psiphond-ng service
+# Or manual:
+# mkdir -p ~/.local/bin
+# cp build/psiphond-ng ~/.local/bin/
+# mkdir -p ~/.config/systemd/user
+# cp config/psiphond-ng-user.service ~/.config/systemd/user/psiphond-ng.service
+# systemctl --user daemon-reload
+# systemctl --user enable --now psiphond-ng
 
 #### 5. Verify Proxy is Running
 
 Check logs:
 ```bash
-sudo journalctl -u psiphond-ng -f
+journalctl --user -u psiphond-ng -f
 ```
 
 Look for:
@@ -205,6 +213,10 @@ For access control, you can configure the proxy to approve each client connectio
 
 ### Setup Approval Server
 
+You have two options for the approval server:
+
+#### Option 1: Simple WebSocket Server (for testing)
+
 Use the WebSocket approval server from `scripts/ws-approval-server/` (included in psiphon-tunnel-core repository).
 
 ```bash
@@ -214,11 +226,32 @@ go build -o approval-server main.go
 ./approval-server -addr :8080
 ```
 
-Or install as service:
+This auto-approves all connections by default. Customize the code for your approval logic.
+
+#### Option 2: DOIP Approval Server (production-ready)
+
+For production deployments with dynamic configuration and strict field validation, use the standalone DOIP approval server (included in this repository's parent directory or available separately):
+
 ```bash
-sudo cp config/approval-server.service /etc/systemd/system/
-sudo systemctl enable --start approval-server
+# Build
+go build -o doip-approval-server ./doip-approval-server/cmd/doip-approval-server
+
+# Run with config
+./doip-approval-server -config ./config.json -admin-port :8080 -ws-port :8443
+
+# Or install as systemd user service
+cd doip-approval-server/deployment
+./install.sh
+systemctl --user start doip-approval-server
 ```
+
+The DOIP server provides:
+- Dynamic strict field configuration via JSON file
+- Admin HTTP API for runtime updates
+- Persistent logging (when configured)
+- Systemd service management
+
+See `doip-approval-server/README.md` for details.
 
 ### Configure Psiphon Proxy
 

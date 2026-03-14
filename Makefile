@@ -64,10 +64,25 @@ clean:
 	go clean
 
 install:
-	sudo ./scripts/install.sh
+	@echo "Installing as user service (no sudo needed)..."
+	@if [ ! -f "$(BUILD_DIR)/$(BINARY_NAME)" ]; then \
+		echo "Binary not found. Run 'make build' first."; \
+		exit 1; \
+	fi
+	@$(BUILD_DIR)/$(BINARY_NAME) service
+	@echo ""
+	@echo "To configure: nano ~/.config/psiphond-ng/psiphond-ng.conf"
+	@echo "To control: systemctl --user {start,stop,restart,status} psiphond-ng"
 
 uninstall:
-	sudo ./scripts/uninstall.sh
+	@echo "Uninstalling user service..."
+	@if [ -f ~/.config/systemd/user/psiphond-ng.service ]; then \
+		systemctl --user disable --now psiphond-ng 2>/dev/null || true; \
+		rm ~/.config/systemd/user/psiphond-ng.service; \
+		systemctl --user daemon-reload; \
+	fi
+	@rm -f ~/.local/bin/psiphond-ng
+	@echo "To remove config and data: rm -rf ~/.config/psiphond-ng ~/.local/var/lib/psiphon ~/.local/var/log/psiphon"
 
 run:
 	./$(BUILD_DIR)/$(BINARY_NAME) -config psiphond-dev.conf
@@ -117,8 +132,8 @@ help:
 	@echo "  fmt              - Format source code"
 	@echo "  lint             - Run linter (requires golangci-lint)"
 	@echo "  clean            - Clean build artifacts"
-	@echo "  install          - Install system-wide (requires sudo)"
-	@echo "  uninstall        - Uninstall from system"
+	@echo "  install          - Install as user service (no sudo) using built-in installer"
+	@echo "  uninstall        - Remove user service and binary"
 	@echo "  run              - Build and run in foreground"
 	@echo "  run-debug        - Build and run with debug logging"
 	@echo "  deps             - Download and verify dependencies"
@@ -133,4 +148,4 @@ help:
 	@echo "Examples:"
 	@echo "  make build GOARCH=arm64"
 	@echo "  make release VERSION=1.0.0"
-	@echo "  sudo make install"
+	@echo "  make install    # no sudo needed!"

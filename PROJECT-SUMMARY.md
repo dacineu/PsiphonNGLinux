@@ -18,17 +18,16 @@ A complete Go project with:
 - ✅ Controller wrapper with graceful shutdown
 
 ### Configuration
-- ✅ `config/psiphond-ng.conf` - Default port forward config
+- ✅ `config/psiphond-ng.conf` - Default config template (XDG paths)
 - ✅ `config/psiphond-ng-inproxy-client.conf` - In-proxy client example
 - ✅ `config/psiphond-ng-inproxy-proxy.conf` - In-proxy server example with approval hook
-- ✅ `config/psiphond-ng.service` - Production systemd unit with security hardening
+- ✅ `config/psiphond-ng-user.service` - Systemd **user** service unit
 
 ### Build & Install
 - ✅ `scripts/build.sh` - Smart build script with tags, compression, cross-compile
-- ✅ `scripts/install.sh` - Automated systemd deployment with user creation
-- ✅ `scripts/uninstall.sh` - Clean removal
 - ✅ `scripts/generate-keys.sh` - Generate in-proxy keys (Ed25519 + secret)
 - ✅ `Makefile` - Standard make targets for build/test/install/release
+- ✅ Built-in installer: `./psiphond-ng service` - Interactive user service setup
 
 ### Documentation (Comprehensive)
 - ✅ `README.md` - Project overview, features, quick start
@@ -86,18 +85,18 @@ JSON config mapped to `psiphon.Config` with:
 - Type conversion (durations, integers, bools)
 - All 100+ psiphon parameters exposed
 
-### 3. Systemd Security Hardening
+### 3. Systemd User Service Security
 
-The `.service` file includes:
-- Dedicated `psiphon` user
-- Capability bounding (`CAP_NET_ADMIN` for TUN)
-- `ProtectSystem=strict`, `ProtectHome=true`, `PrivateTmp=true`
+The `psiphond-ng-user.service` file includes:
+- Runs as regular user (no dedicated system account)
+- Capability bounding (`CAP_NET_ADMIN` for TUN when needed via setcap)
+- `NoNewPrivileges=true`, `PrivateTmp=true`, `ProtectHome=false`
+- Resource limits (NOFILE, NPROC)
 - System call filtering
-- Resource limits
-- No new privileges
 - Restart on failure
+- Uses XDG directories (`~/.config`, `~/.local/var`)
 
-Compliant with modern Linux security best practices.
+Compliant with modern Linux security best practices for user services.
 
 ### 4. Advanced Feature Support
 
@@ -111,7 +110,7 @@ Compliant with modern Linux security best practices.
 ### 5. Developer Experience
 
 - Single-command build: `make build` or `./scripts/build.sh`
-- Automated install: `sudo ./scripts/install.sh`
+- One-command install: `./psiphond-ng service` (no sudo needed!)
 - Key generation: `./scripts/generate-keys.sh`
 - Comprehensive docs: quick start, config reference, TUN, in-proxy
 - Examples for all modes (portforward, TUN, in-proxy client, in-proxy server)
@@ -162,19 +161,19 @@ Compliant with modern Linux security best practices.
 # 1. Build
 ./scripts/build.sh
 
-# 2. Install
-sudo ./scripts/install.sh
+# 2. Install as user service (no sudo!)
+./psiphond-ng service
 
-# 3. Configure
-sudo nano /etc/psiphon/psiphond-ng.conf
+# 3. Configure (optional but recommended)
+nano ~/.config/psiphond-ng/psiphond-ng.conf
 # Set propagation_channel_id, sponsor_id, region, etc.
-sudo systemctl restart psiphond-ng
+systemctl --user restart psiphond-ng
 
 # 4. Test
 curl -x http://127.0.0.1:8080 https://checkip.amazonaws.com
 
 # 5. Monitor
-sudo journalctl -u psiphond-ng -f
+journalctl --user -u psiphond-ng -f
 ```
 
 ---
@@ -192,10 +191,11 @@ sudo ./psiphon  # downloads binary and runs it
 ### PsiphonNGLinux (now)
 
 ```bash
-# Native service with full control
-sudo systemctl status psiphond-ng
-sudo journalctl -u psiphond-ng -f
+# User service with full control
+systemctl --user status psiphond-ng
+journalctl --user -u psiphond-ng -f
 # Auto-start, restart, metrics, TUN, in-proxy, tactics
+# No root required!
 ```
 
 ---
@@ -206,21 +206,21 @@ sudo journalctl -u psiphond-ng -f
    ```bash
    cd /home/dacineu/dev/PsiphonNGLinux
    ./scripts/build.sh
-   sudo ./scripts/install.sh
-   sudo systemctl start psiphond-ng
+   ./psiphond-ng service  # interactive user-level install
+   # Or manual: cp build/psiphond-ng ~/.local/bin/ && systemctl --user enable --now psiphond-ng
    ```
 
 2. **Verify tunnel**:
    ```bash
-   sudo journalctl -u psiphond-ng -f
+   journalctl --user -u psiphond-ng -f
    curl -x http://127.0.0.1:8080 https://checkip.amazonaws.com
    ```
 
 3. **Test TUN mode**:
    ```bash
-   sudo nano /etc/psiphon/psiphond-ng.conf
+   nano ~/.config/psiphond-ng/psiphond-ng.conf
    # Set tunnel_mode: "packet"
-   sudo systemctl restart psiphond-ng
+   systemctl --user restart psiphond-ng
    ip addr show tun-psiphon
    ```
 

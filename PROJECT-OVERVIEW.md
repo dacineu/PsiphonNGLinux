@@ -205,18 +205,20 @@ make build-tun
 
 Binary at: `build/psiphond-ng`
 
-### Install
+### Install (User-Level, No Root)
 
 ```bash
-# Automated
-sudo ./scripts/install.sh
+# Automated (built-in installer)
+./psiphond-ng service
+# This copies binary to ~/.local/bin, creates config, installs user service, and starts
 
 # Or manual
-sudo cp build/psiphond-ng /usr/local/bin/
-sudo cp config/psiphond-ng.conf /etc/psiphon/
-sudo cp config/psiphond-ng.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now psiphond-ng
+mkdir -p ~/.local/bin
+cp build/psiphond-ng ~/.local/bin/
+mkdir -p ~/.config/systemd/user
+cp config/psiphond-ng-user.service ~/.config/systemd/user/psiphond-ng.service
+systemctl --user daemon-reload
+systemctl --user enable --now psiphond-ng
 ```
 
 ---

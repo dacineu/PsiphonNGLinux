@@ -59,33 +59,33 @@ Choose which traffic goes through Psiphon:
 
 ## Common Tasks
 
-### Install from source
+### Install from source (user-level)
 
 ```bash
 git clone https://github.com/yourusername/PsiphonNGLinux.git
 cd PsiphonNGLinux
 ./scripts/build.sh
-sudo ./scripts/install.sh
+./psiphond-ng service  # interactive user service install
 ```
 
 ### Update configuration
 
 ```bash
-sudo nano /etc/psiphon/psiphond-ng.conf
-sudo systemctl restart psiphond-ng
+nano ~/.config/psiphond-ng/psiphond-ng.conf
+systemctl --user restart psiphond-ng
 ```
 
 ### View logs
 
 ```bash
-sudo journalctl -u psiphond-ng -f
-sudo tail -f /var/log/psiphon/psiphond-ng.log
+journalctl --user -u psiphond-ng -f
+tail -f ~/.local/var/log/psiphon/psiphond-ng.log
 ```
 
 ### Check status
 
 ```bash
-sudo systemctl status psiphond-ng
+systemctl --user status psiphond-ng
 ip addr show tun-psiphon  # if TUN mode
 ss -tlnp | grep psiphond  # check listening ports
 ```

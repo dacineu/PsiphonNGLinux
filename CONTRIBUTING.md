@@ -180,30 +180,31 @@ See `cmd/psiphond-ng/integration_test.go` (to be created).
 # Build
 ./scripts/build.sh
 
-# Install to /usr/local (sudo may be needed)
-sudo cp build/psiphond-ng /usr/local/bin/
+# Install as user service (no sudo needed!)
+./psiphond-ng service
 
-# Create config from example
-sudo cp config/psiphond-ng.conf /etc/psiphon/
-sudo nano /etc/psiphon/psiphond-ng.conf  # adjust values
+# Or manual install:
+# mkdir -p ~/.local/bin
+# cp build/psiphond-ng ~/.local/bin/
+# mkdir -p ~/.config/systemd/user
+# cp config/psiphond-ng-user.service ~/.config/systemd/user/psiphond-ng.service
+# systemctl --user daemon-reload
+# systemctl --user enable --now psiphond-ng
 
-# Install service
-sudo cp config/psiphond-ng.service /etc/systemd/system/
-sudo systemctl daemon-reload
-
-# Enable and start
-sudo systemctl enable --now psiphond-ng
+# Configure
+nano ~/.config/psiphond-ng/psiphond-ng.conf  # adjust values (channel_id, sponsor_id, etc.)
+systemctl --user restart psiphond-ng
 
 # Check status
-sudo systemctl status psiphond-ng
+systemctl --user status psiphond-ng
 
 # View logs
-sudo journalctl -u psiphond-ng -f
+journalctl --user -u psiphond-ng -f
 
 # Test proxy
 curl -x http://127.0.0.1:8080 https://checkip.amazonaws.com
 
-# Test TUN (if enabled)
+# Test TUN (if enabled; may require setcap or sudo)
 ip addr show tun-psiphon
 curl --interface tun-psiphon https://checkip.amazonaws.com
 ```

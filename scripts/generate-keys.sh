@@ -79,7 +79,7 @@ func main() {
     fmt.Println("   - Never share the private key or secret with anyone")
     fmt.Println("   - These keys are generated uniquely for each proxy instance")
     fmt.Println()
-    fmt.Println("Add to your config (/etc/psiphon/psiphond-ng.conf):")
+    fmt.Println("Add to your config (~/.config/psiphond-ng/psiphond-ng.conf):")
     fmt.Println(`  "inproxy_session_private_key": "YOUR_PRIVATE_KEY",`)
     fmt.Println(`  "inproxy_session_root_obfuscation_secret": "YOUR_SECRET"`)
 }

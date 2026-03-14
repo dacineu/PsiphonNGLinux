@@ -29,8 +29,8 @@ Complete reference of all configuration options.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `data_directory` | string | `/var/lib/psiphon` | Root directory for persistent data |
-| `log_file` | string | `/var/log/psiphon/psiphond-ng.log` | Path to log file |
+| `data_directory` | string | `~/.local/var/lib/psiphon` | Root directory for persistent data (XDG) |
+| `log_file` | string | `~/.local/var/log/psiphon/psiphond-ng.log` | Path to log file (XDG) |
 | `log_level` | string | `"info"` | Log level: `"debug"`, `"info"`, `"warning"`, `"error"` |
 | `propagation_channel_id` | string | `"FFFFFFFFFFFFFFFF"` | Channel identifier (required) |
 | `sponsor_id` | string | `"FFFFFFFFFFFFFFFF"` | Sponsor identifier (required) |

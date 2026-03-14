@@ -1,0 +1,48 @@
+[Unit]
+Description=PsiphonNGLinux Daemon (User Service)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Use XDG directories
+Environment="XDG_CONFIG_HOME=%h/.config"
+Environment="XDG_STATE_HOME=%h/.local/state"
+Environment="XDG_CACHE_HOME=%h/.cache"
+
+# Config file path (default location used by binary)
+Environment="CONFIG_FILE=%h/.config/psiphond-ng/psiphond-ng.conf"
+
+# Log to journald (no separate log file needed for user service)
+ExecStart=%h/.local/bin/psiphond-ng -config ${CONFIG_FILE}
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# User-level security (no privilege escalation)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=false  # Need access to ~/.config, ~/.local
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+# Allow writing to config and data directories within home
+ReadWritePaths=%h/.config/psiphond-ng %h/.local/var/lib/psiphon %h/.local/var/log/psiphon
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=512
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

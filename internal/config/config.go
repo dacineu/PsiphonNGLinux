@@ -188,9 +188,9 @@ type ApprovalLoggingConfig struct {
 // DefaultConfig returns a default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		DataDirectory: "/var/lib/psiphon",
-		LogFile:       "/var/log/psiphon/psiphond-ng.log",
-		LogLevel:      "info",
+		DataDirectory: filepath.Join(os.Getenv("HOME"), ".local/var/lib/psiphon"),
+		LogFile:       filepath.Join(os.Getenv("HOME"), ".local/var/log/psiphon/psiphond-ng.log"),
+		LogLevel:      "notice",
 
 		PropagationChannelId: "FFFFFFFFFFFFFFFF",
 		SponsorId:            "FFFFFFFFFFFFFFFF",
@@ -201,7 +201,7 @@ func DefaultConfig() *Config {
 
 		LocalSocksProxyPort: 1080,
 		LocalHttpProxyPort:  8080,
-		ListenInterface:     "127.0.0.1",
+		ListenInterface:     "",
 
 		PacketTunnelDeviceName:     "tun-psiphon",
 		PacketTunnelAddressIPv4:    "10.0.0.2/30",
@@ -237,7 +237,10 @@ func DefaultConfig() *Config {
 		TunnelPoolSize:                         1,
 
 		DisableRemoteServerListFetcher: false,
-		RemoteServerListDownloadFilename: "remote_server_list",
+		RemoteServerListURLs:                []string{"https://s3.amazonaws.com/psiphon/web/mjr4-p23r-puwl/server_list_compressed"},
+		RemoteServerListSignaturePublicKey:  "MIICIDANBgkqhkiG9w0BAQEFAAOCAg0AMIICCAKCAgEAt7Ls+/39r+T6zNW7GiVpJfzq/xvL9SBH5rIFnk0RXYEYavax3WS6HOD35eTAqn8AniOwiH+DOkvgSKF2caqk/y1dfq47Pdymtwzp9ikpB1C5OfAysXzBiwVJlCdajBKvBZDerV1cMvRzCKvKwRmvDmHgphQQ7WfXIGbRbmmk6opMBh3roE42KcotLFtqp0RRwLtcBRNtCdsrVsjiI1Lqz/lH+T61sGjSjQ3CHMuZYSQJZo/KrvzgQXpkaCTdbObxHqb6/+i1qaVOfEsvjoiyzTxJADvSytVtcTjijhPEV6XskJVHE1Zgl+7rATr/pDQkw6DPCNBS1+Y6fy7GstZALQXwEDN/qhQI9kWkHijT8ns+i1vGg00Mk/6J75arLhqcodWsdeG/M/moWgqQAnlZAGVtJI1OgeF5fsPpXu4kctOfuZlGjVZXQNW34aOzm8r8S0eVZitPlbhcPiR4gT/aSMz/wd8lZlzZYsje/Jr8u/YtlwjjreZrGRmG8KMOzukV3lLmMppXFMvl4bxv6YFEmIuTsOhbLTwFgh7KYNjodLj/LsqRVfwz31PgWQFTEPICV7GCvgVlPRxnofqKSjgTWI4mxDhBpVcATvaoBl1L/6WLbFvBsoAUBItWwctO2xalKxF5szhGm8lccoc5MZr8kfE0uxMgsxz4er68iCID+rsCAQM=",
+		RemoteServerListDownloadFilename:   "remote_server_list",
+		ObfuscatedServerListRootURLs:        []string{"https://s3.amazonaws.com/psiphon/web/mjr4-p23r-puwl/obfuscated_server_lists"},
 		ObfuscatedServerListDownloadDirectory: "obfuscated_server_lists",
 
 		DisableTactics:               false,
